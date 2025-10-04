@@ -1,19 +1,43 @@
+# Set up instructions
+
+# If you want to play sound from root/sudo
+# sudo mkdir -p /etc/systemd/system/user@.service.d/
+# sudo nano /etc/systemd/system/user@.service.d/audio.conf
+
+# [Service]
+# Environment="PULSE_SERVER=/run/user/1000/pulse/native"
+# sudo systemctl daemon-reload
+# sudo reboot
+
+# Can't do LEDs and sound from same pi
+
 import datetime
 import time
 import threading
+from gpiozero import Button
+import board
+import subprocess
+import serial
 
-import RPi.GPIO as GPIO 
-
+BUTTON_PIN_BCM = 23 # BCM Pin 23, which corresponds to BOARD Pin 16
 TRIGGER_DURATION_1 = 5.0
-BUTTON_PIN = 16
+MP3_FILE_PATH = '/home/pi/git/zombie.mp3'
 
-# Clean up from any previous crashes
-GPIO.cleanup() 
+ARDUINO_PORT = '/dev/ttyACM0' 
+BAUD_RATE = 9600
+arduino = None
 
 trigger_1 = False
-trigger_time_1 = datetime.datetime.min 
+trigger_time_1 = datetime.datetime.min
 running = True
 
+try:
+    # Set a timeout in case the Arduino isn't plugged in
+    arduino = serial.Serial(ARDUINO_PORT, BAUD_RATE, timeout=1) 
+    print(f"Serial connection established on {ARDUINO_PORT}.")
+    time.sleep(2) # Give Arduino time to reset after connection
+except serial.SerialException as e:
+    print(f"ERROR: Could not connect to Arduino on {ARDUINO_PORT}. {e}")
 
 def time_since(timestamp):
     delta = datetime.datetime.now() - timestamp
@@ -26,22 +50,43 @@ def run_sequence(duration):
     
     print(f"\n[THREAD] Sequence started! Running for {duration} seconds.")
     start_time = time.time()
-    
+
+    # Play sound
+    try:
+        print('Calling sounds with mpg123...')
+        MPG_COMMAND = '/usr/bin/mpg123'
+        MP3_FILE_PATH = '/home/pi/git/halloween/zombie.mp3'
+        command_string = f"{MPG_COMMAND} -q -a hw:1,0 {MP3_FILE_PATH}"
+        subprocess.Popen(command_string,
+                        shell=True, 
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        print(f"\n[AUDIO ERROR] mpg123 executable not found at {MPG_COMMAND}.")
+
+    # Trigger LEDs
+    if arduino:
+        try:
+            arduino.write('A'.encode('ascii')) 
+            print("[SERIAL] Sent 'A' command to Arduino.")
+        except Exception as e:
+            print(f"[SERIAL ERROR] Failed to send command: {e}")
+
     while time.time() - start_time < duration:
-        # --- YOUR SEQUENCE CODE GOES HERE REPEATEDLY ---
         remaining = duration - (time.time() - start_time)
         print(f'\r[THREAD] Sequence active... {remaining:.1f}s remaining.', end='', flush=True) 
-        time.sleep(0.1) # Delay to prevent 100% CPU usage inside the thread
+        time.sleep(0.5)
         
     print("\n[THREAD] Sequence finished.")
     
     trigger_1 = False 
 
 
-def trigger_1_callback(channel):
+def trigger_1_callback():
     global trigger_1
     global trigger_time_1
     
+    # GPIO Zero handles debouncing internally (default is 10ms)
     if not trigger_1:
         trigger_1 = True
         trigger_time_1 = datetime.datetime.now()
@@ -52,16 +97,16 @@ def trigger_1_callback(channel):
         sequence_thread.start()
 
 
-# --- GPIO Setup  ---
-GPIO.setwarnings(False) 
-GPIO.setmode(GPIO.BOARD) 
+# --- GPIO Zero Setup ---
+# The Button object defaults to PUD_UP (pull_up=True).
+# Since you wired your button for PUD_DOWN (connecting signal to 3.3V), 
+# we set pull_up=False to use the internal pull-down resistor.
+# Note: No 'bouncetime' needed; it's handled internally.
+button = Button(BUTTON_PIN_BCM, pull_up=False) 
+button.when_pressed = trigger_1_callback
 
-GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-GPIO.add_event_detect(BUTTON_PIN, GPIO.RISING, callback=trigger_1_callback, bouncetime=200) 
-
-print(f"System Ready. Listening on Pin {BUTTON_PIN}. Sequence duration: {TRIGGER_DURATION_1}s.")
+print(f"System Ready. Listening on BCM Pin {BUTTON_PIN_BCM} (BOARD Pin 16). Sequence duration: {TRIGGER_DURATION_1}s.")
 print("The main loop is non-blocking. Press Ctrl+C to exit.")
-
 
 try:
     while running:
@@ -73,6 +118,3 @@ try:
 
 except KeyboardInterrupt:
     print("\nExiting program.")
-
-finally:
-    GPIO.cleanup()

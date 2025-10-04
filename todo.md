@@ -13,4 +13,5 @@ Set up git: 2025-10-02 >
 
 # P2
 
+install python3-rpi-lgpio instead.
 
