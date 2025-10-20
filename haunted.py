@@ -22,10 +22,16 @@ import vlc
 
 BUTTON_PIN_BCM = 24 # BCM Pin 23, which corresponds to BOARD Pin 16
 BUTTON2_PIN_BCM = 23
-TRIGGER_DURATION_1 = 2.0
+TRIGGER_DURATION_1 = 1.0
+
+
+MPG_COMMAND = '/usr/bin/mpg123'
+MP3_FILE_PATH = '/home/pi/git/halloween/zombie.mp3' # <-- Confirming the full working path here
+
 
 # ARDUINO_PORT = '/dev/ttyACM0'
-ARDUINO_PORT = '/dev/ttyUSB0' 
+ARDUINO_PORT = '/dev/ttyUSB0'
+# ARDUINO_PORT = '/dev/ttyUSB1' 
 BAUD_RATE = 9600
 arduino = None
 
@@ -56,9 +62,17 @@ def run_sequence(duration):
     # Play sound
     try:
         print('Calling sound with VLC...')
-        MP3_FILE_PATH = '/home/pi/git/halloween/zombie2.mp3'
-        p = vlc.MediaPlayer(f"file://{MP3_FILE_PATH}")
-        p.play()
+        # MP3_FILE_PATH = '/home/pi/git/halloween/zombie2.mp3'
+        # vlc_instance = vlc.Instance('--aout=alsa', '--no-video') 
+        # p = vlc_instance.media_player_new(f"file://{MP3_FILE_PATH}")
+        # p.play()
+
+        command_string = f"{MPG_COMMAND} -q -a hw:1,0 {MP3_FILE_PATH}"
+        subprocess.Popen(command_string,
+            shell=True, # <--- CRITICAL CHANGE: Use the shell
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+
     except FileNotFoundError:
         print(f"\n[AUDIO ERROR] mpg123 executable not found at {MPG_COMMAND}.")
 
