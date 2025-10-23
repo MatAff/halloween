@@ -1,4 +1,5 @@
-
+import os
+import random
 import datetime
 import time
 import threading
@@ -16,17 +17,23 @@ BUTTON_PIN_BCM = 24 # BCM Pin 23, which corresponds to BOARD Pin 16
 BUTTON2_PIN_BCM = 23
 TRIGGER_DURATION_1 = 1.0
 
+sound_folder = "/home/pi/git/halloween/sounds"
+sound_files = [os.path.join(sound_folder, f) for f in os.listdir(sound_folder)]
+
+ambient_sound_folder = "/home/pi/git/halloween/ambientsounds"
+ambient_sound_files = [os.path.join(ambient_sound_folder, f) for f in os.listdir(ambient_sound_folder)]
+next_ambient_time = 0
+next_ambient_random = lambda: time.time() + random.randint(30, 60)
 
 # GPIO.cleanup() 
 
 MPG_COMMAND = '/usr/bin/mpg123'
-MP3_FILE_PATH = '/home/pi/git/halloween/zombie.mp3' # <-- Confirming the full working path here
 
 # Pygame for sound
-pygame.init()
-pygame.mixer.pre_init(44100, -16, 2, 2048) # Setup for 44.1kHz, 16-bit, stereo, 2048 buffer
-my_sound = pygame.mixer.Sound(MP3_FILE_PATH)
-my_sound.set_volume(1.0)
+#pygame.init()
+#pygame.mixer.pre_init(44100, -16, 2, 2048) # Setup for 44.1kHz, 16-bit, stereo, 2048 buffer
+#my_sound = pygame.mixer.Sound(MP3_FILE_PATH)
+#my_sound.set_volume(1.0)
 
 # ARDUINO_PORT = '/dev/ttyACM0'
 ARDUINO_PORT_0 = '/dev/ttyUSB0'
@@ -56,6 +63,23 @@ def time_since(timestamp):
     delta = datetime.datetime.now() - timestamp
     return delta.total_seconds()
 
+def play_sound(MP3_FILE_PATH):
+    print(f'Calling sound {MP3_FILE_PATH}')
+
+    # MP3_FILE_PATH = '/home/pi/git/halloween/zombie2.mp3'
+    # vlc_instance = vlc.Instance('--aout=alsa', '--no-video') 
+    # p = vlc_instance.media_player_new(f"file://{MP3_FILE_PATH}")
+    # p.play()
+
+    # Pygame sound
+    # my_sound.play()
+
+    command_string = f"{MPG_COMMAND} -q -a hw:1,0 {MP3_FILE_PATH}"
+    subprocess.Popen(command_string,
+        shell=True, # <--- CRITICAL CHANGE: Use the shell
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL)
+
 
 def run_sequence(duration):
     """Sequence logic runs for 'duration' seconds and automatically manages the flag."""
@@ -66,20 +90,7 @@ def run_sequence(duration):
 
     # Play sound
     try:
-        print('Calling sound with VLC...')
-        # MP3_FILE_PATH = '/home/pi/git/halloween/zombie2.mp3'
-        # vlc_instance = vlc.Instance('--aout=alsa', '--no-video') 
-        # p = vlc_instance.media_player_new(f"file://{MP3_FILE_PATH}")
-        # p.play()
-
-        # Pygame sound
-        my_sound.play()
-
-        # command_string = f"{MPG_COMMAND} -q -a hw:1,0 {MP3_FILE_PATH}"
-        # subprocess.Popen(command_string,
-        #     shell=True, # <--- CRITICAL CHANGE: Use the shell
-        #     stdout=subprocess.DEVNULL,
-        #     stderr=subprocess.DEVNULL)
+        play_sound(random.choice(sound_files))
 
     except FileNotFoundError:
         print(f"\n[AUDIO ERROR] mpg123 executable not found at {MPG_COMMAND}.")
@@ -141,6 +152,10 @@ try:
         main_time = time.strftime('%H:%M:%S', time.localtime())
         status = "BUSY" if trigger_1 else "READY"
         print(f"\r[MAIN LOOP] Time: {main_time} | Status: {status}", end='', flush=True) 
+
+        if time.time() > next_ambient_time:
+            next_ambient_time = next_ambient_random()
+            play_sound(random.choice(ambient_sound_files))
         
         time.sleep(0.05) 
 

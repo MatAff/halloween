@@ -8,7 +8,7 @@ import os
 
 # Use the ABSOLUTE path to mpg123 (e.g., /usr/bin/mpg123)
 MPG_COMMAND = '/usr/bin/mpg123'
-MP3_FILE_PATH = '/home/pi/git/halloween/zombie.mp3' # <-- Confirming the full working path here
+MP3_FILE_PATH = '/home/pi/git/halloween/sounds/zombie.mp3' # <-- Confirming the full working path here
 
 # ... inside run_sequence function ...
 try:
