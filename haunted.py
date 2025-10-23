@@ -1,15 +1,3 @@
-# Set up instructions
-
-# If you want to play sound from root/sudo
-# sudo mkdir -p /etc/systemd/system/user@.service.d/
-# sudo nano /etc/systemd/system/user@.service.d/audio.conf
-
-# [Service]
-# Environment="PULSE_SERVER=/run/user/1000/pulse/native"
-# sudo systemctl daemon-reload
-# sudo reboot
-
-# Can't do LEDs and sound from same pi
 
 import datetime
 import time
@@ -20,18 +8,29 @@ import subprocess
 import serial
 import vlc
 
+import pygame
+# import RPi.GPIO as GPIO 
+
+
 BUTTON_PIN_BCM = 24 # BCM Pin 23, which corresponds to BOARD Pin 16
 BUTTON2_PIN_BCM = 23
 TRIGGER_DURATION_1 = 1.0
 
 
+# GPIO.cleanup() 
+
 MPG_COMMAND = '/usr/bin/mpg123'
 MP3_FILE_PATH = '/home/pi/git/halloween/zombie.mp3' # <-- Confirming the full working path here
 
+# Pygame for sound
+pygame.init()
+pygame.mixer.pre_init(44100, -16, 2, 2048) # Setup for 44.1kHz, 16-bit, stereo, 2048 buffer
+my_sound = pygame.mixer.Sound(MP3_FILE_PATH)
+my_sound.set_volume(1.0)
 
 # ARDUINO_PORT = '/dev/ttyACM0'
-ARDUINO_PORT = '/dev/ttyUSB0'
-# ARDUINO_PORT = '/dev/ttyUSB1' 
+ARDUINO_PORT_0 = '/dev/ttyUSB0'
+ARDUINO_PORT_1 = '/dev/ttyUSB1' 
 BAUD_RATE = 9600
 arduino = None
 
@@ -40,12 +39,18 @@ trigger_time_1 = datetime.datetime.min
 running = True
 
 try:
-    # Set a timeout in case the Arduino isn't plugged in
-    arduino = serial.Serial(ARDUINO_PORT, BAUD_RATE, timeout=1) 
-    print(f"Serial connection established on {ARDUINO_PORT}.")
-    time.sleep(2) # Give Arduino time to reset after connection
+    arduino = serial.Serial(ARDUINO_PORT_0, BAUD_RATE, timeout=1) 
+    print(f"Serial connection established on {ARDUINO_PORT_0}.")
+    time.sleep(2)
 except serial.SerialException as e:
-    print(f"ERROR: Could not connect to Arduino on {ARDUINO_PORT}. {e}")
+    print(f"ERROR: Could not connect to Arduino on {ARDUINO_PORT_0}. {e}")
+    try:
+        arduino = serial.Serial(ARDUINO_PORT_1, BAUD_RATE, timeout=1) 
+        print(f"Serial connection established on {ARDUINO_PORT_1}.")
+        time.sleep(2)
+    except serial.SerialException as e:
+        print(f"ERROR: Could not connect to Arduino on {ARDUINO_PORT_1}. {e}")
+
 
 def time_since(timestamp):
     delta = datetime.datetime.now() - timestamp
@@ -67,11 +72,14 @@ def run_sequence(duration):
         # p = vlc_instance.media_player_new(f"file://{MP3_FILE_PATH}")
         # p.play()
 
-        command_string = f"{MPG_COMMAND} -q -a hw:1,0 {MP3_FILE_PATH}"
-        subprocess.Popen(command_string,
-            shell=True, # <--- CRITICAL CHANGE: Use the shell
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+        # Pygame sound
+        my_sound.play()
+
+        # command_string = f"{MPG_COMMAND} -q -a hw:1,0 {MP3_FILE_PATH}"
+        # subprocess.Popen(command_string,
+        #     shell=True, # <--- CRITICAL CHANGE: Use the shell
+        #     stdout=subprocess.DEVNULL,
+        #     stderr=subprocess.DEVNULL)
 
     except FileNotFoundError:
         print(f"\n[AUDIO ERROR] mpg123 executable not found at {MPG_COMMAND}.")
@@ -110,12 +118,19 @@ def trigger_1_callback():
         sequence_thread.start()
 
 
+# # --- GPIO Setup  ---
+# GPIO.setwarnings(False) 
+# GPIO.setmode(GPIO.BCM)
+# GPIO.setup(BUTTON_PIN_BCM, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+# GPIO.add_event_detect(BUTTON_PIN_BCM, GPIO.RISING, callback=trigger_1_callback, bouncetime=200) 
+
+
 # --- GPIO Zero Setup ---
 # The Button object defaults to PUD_UP (pull_up=True).
 # Since you wired your button for PUD_DOWN (connecting signal to 3.3V), 
 # we set pull_up=False to use the internal pull-down resistor.
 # Note: No 'bouncetime' needed; it's handled internally.
-button = Button(BUTTON_PIN_BCM, pull_up=False) 
+button = Button(BUTTON_PIN_BCM, pull_up=True, bounce_time=0.2)  # , bounce_time=0.01 
 button.when_pressed = trigger_1_callback
 
 print(f"System Ready. Listening on BCM Pin {BUTTON_PIN_BCM} (BOARD Pin 16). Sequence duration: {TRIGGER_DURATION_1}s.")
